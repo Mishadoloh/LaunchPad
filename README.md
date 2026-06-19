@@ -21,7 +21,8 @@ The project is structured as a TypeScript monorepo with a React frontend, an Exp
 - **Database:** SQLite with Prisma ORM
 - **Validation:** Zod shared through `packages/shared`
 - **Auth:** JWT with bcrypt password hashing
-- **Tooling:** npm workspaces, TypeScript project builds
+- **Operations:** Python export and health-check tools, SQL inspection queries
+- **Tooling:** npm workspaces, TypeScript project builds, GitHub Pages workflow
 
 ## Project Structure
 
@@ -36,6 +37,11 @@ frontend/
 
 packages/
   shared/       Shared Zod schemas, DTOs, and TypeScript domain types
+
+tools/
+  python/       Operational CLI for exports, summaries, and deployment checks
+  sql/          Local SQLite reporting queries
+  shell/        Repeatable build and export scripts
 ```
 
 ## Getting Started
@@ -97,6 +103,25 @@ npm run db:generate  # Generate Prisma client
 npm run db:push      # Sync Prisma schema with local SQLite database
 npm run db:seed      # Seed local workspace data
 npm run db:reset     # Reset the local database
+```
+
+## Operations Tools
+
+The repository includes Python and SQL utilities for local maintenance and delivery review.
+
+```bash
+export PYTHONPATH="$PWD/tools/python"
+python -m launchpad_ops.cli health
+python -m launchpad_ops.cli login admin@launchpad.dev launchpad123
+python -m launchpad_ops.cli export --token "$LAUNCHPAD_TOKEN"
+python -m launchpad_ops.cli summary --token "$LAUNCHPAD_TOKEN"
+```
+
+Useful SQL reports live in:
+
+```text
+tools/sql/dashboard_metrics.sql
+tools/sql/workload_report.sql
 ```
 
 ## Core API Routes

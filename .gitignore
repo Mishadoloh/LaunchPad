@@ -9,3 +9,6 @@ coverage
 .DS_Store
 npm-debug.log*
 .github-tree-payload.json
+__pycache__/
+*.pyc
+exports/
