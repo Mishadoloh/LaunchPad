@@ -33,6 +33,13 @@ const API_URL = import.meta.env.VITE_API_URL ?? "/api";
 const TOKEN_KEY = "launchpad_token";
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true";
 
+type HealthResponse = Record<string, unknown> & {
+  status: string;
+  latencyMs: number;
+  mode?: string;
+  checkedAt?: string;
+};
+
 export const tokenStore = {
   get: () => localStorage.getItem(TOKEN_KEY),
   set: (token: string) => localStorage.setItem(TOKEN_KEY, token),
@@ -67,6 +74,25 @@ export async function fetchDashboard() {
   if (DEMO_MODE) return demoFetchDashboard();
   const { data } = await api.get<DashboardResponse>("/dashboard");
   return data;
+}
+
+export async function fetchHealth() {
+  if (DEMO_MODE) {
+    return {
+      status: "ok",
+      latencyMs: 0,
+      mode: "demo",
+      checkedAt: new Date().toISOString()
+    } satisfies HealthResponse;
+  }
+
+  const started = performance.now();
+  const { data } = await api.get<Record<string, unknown>>("/health");
+  return {
+    ...data,
+    status: String(data.status ?? "ok"),
+    latencyMs: Math.round(performance.now() - started)
+  } satisfies HealthResponse;
 }
 
 export async function fetchOperations() {

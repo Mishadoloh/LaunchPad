@@ -4,20 +4,26 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
-  CalendarDays,
   CheckCircle2,
   CircleDollarSign,
   Clock3,
+  Copy,
+  Database,
+  Download,
   Gauge,
   Layers3,
   ListTodo,
+  RefreshCw,
+  RotateCcw,
+  Save,
   ShieldCheck,
   SlidersHorizontal,
   TrendingUp,
+  UserRound,
   UsersRound
 } from "lucide-react";
-import type { ApiProject, ApiTask, DashboardResponse, TaskPriority, TaskStatus } from "@launchpad/shared";
-import { createProject, createTask, fetchDashboard, updateTask } from "../api/client";
+import type { ApiProject, ApiTask, ApiUser, DashboardResponse, TaskPriority, TaskStatus } from "@launchpad/shared";
+import { createProject, createTask, fetchDashboard, fetchHealth, updateTask } from "../api/client";
 import { Sidebar, type WorkspaceView } from "../components/Sidebar";
 import { Topbar } from "../components/Topbar";
 import { StatCard } from "../components/StatCard";
@@ -62,6 +68,39 @@ const viewCopy: Record<WorkspaceView, { eyebrow: string; title: string; descript
 };
 
 const priorityOrder: TaskPriority[] = ["URGENT", "HIGH", "MEDIUM", "LOW"];
+const settingsStorageKey = "launchpad_workspace_settings";
+
+type WorkspaceSettings = {
+  workspaceName: string;
+  apiBaseUrl: string;
+  timezone: string;
+  reviewDay: string;
+  sprintCadence: string;
+  defaultPriority: TaskPriority;
+  defaultEstimateHours: number;
+  sessionTimeoutMinutes: number;
+  weeklyDeliveryReview: boolean;
+  urgentTaskAlerts: boolean;
+  dailyDigest: boolean;
+  autoArchiveShipped: boolean;
+  requireReviewForUrgent: boolean;
+};
+
+const defaultWorkspaceSettings: WorkspaceSettings = {
+  workspaceName: "LaunchPad Studio OS",
+  apiBaseUrl: import.meta.env.VITE_API_URL ?? "/api",
+  timezone: "Europe/Kyiv",
+  reviewDay: "Friday",
+  sprintCadence: "Weekly",
+  defaultPriority: "MEDIUM",
+  defaultEstimateHours: 8,
+  sessionTimeoutMinutes: 120,
+  weeklyDeliveryReview: true,
+  urgentTaskAlerts: true,
+  dailyDigest: false,
+  autoArchiveShipped: false,
+  requireReviewForUrgent: true
+};
 
 export function DashboardPage() {
   const { user, signOut } = useAuth();
@@ -139,6 +178,7 @@ export function DashboardPage() {
             <WorkspaceContent
               view={activeView}
               data={dashboardQuery.data}
+              user={user}
               chartData={chartData}
               isUpdating={moveTaskMutation.isPending}
               onAddProject={() => setModal("project")}
@@ -172,6 +212,7 @@ export function DashboardPage() {
 function WorkspaceContent({
   view,
   data,
+  user,
   chartData,
   isUpdating,
   onAddProject,
@@ -180,6 +221,7 @@ function WorkspaceContent({
 }: {
   view: WorkspaceView;
   data: DashboardResponse;
+  user: ApiUser;
   chartData: Array<{ label: string; value: number }>;
   isUpdating: boolean;
   onAddProject: () => void;
@@ -203,7 +245,7 @@ function WorkspaceContent({
   }
 
   if (view === "settings") {
-    return <SettingsView data={data} />;
+    return <SettingsView data={data} user={user} />;
   }
 
   return <DashboardHome data={data} chartData={chartData} isUpdating={isUpdating} onAddProject={onAddProject} onAddTask={onAddTask} onMoveTask={onMoveTask} />;
@@ -446,7 +488,53 @@ function TeamView({ data }: { data: DashboardResponse }) {
   );
 }
 
-function SettingsView({ data }: { data: DashboardResponse }) {
+function SettingsView({ data, user }: { data: DashboardResponse; user: ApiUser }) {
+  const [settings, setSettings] = useState<WorkspaceSettings>(() => loadWorkspaceSettings());
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const healthQuery = useQuery({ queryKey: ["api-health"], queryFn: fetchHealth, retry: false, staleTime: 30_000 });
+  const isDirty = JSON.stringify(settings) !== JSON.stringify(loadWorkspaceSettings());
+  const healthStatus = healthQuery.isError ? "offline" : String(healthQuery.data?.status ?? "checking");
+  const latency = typeof healthQuery.data?.latencyMs === "number" ? `${healthQuery.data.latencyMs}ms` : healthQuery.data?.mode === "demo" ? "demo" : "pending";
+  const openTasks = data.tasks.filter((task) => task.status !== "DONE").length;
+  const urgentTasks = data.tasks.filter((task) => task.priority === "URGENT" && task.status !== "DONE").length;
+  const readiness = [
+    { label: "API reachable", ok: healthStatus !== "offline" },
+    { label: "Projects seeded", ok: data.projects.length > 0 },
+    { label: "Team assigned", ok: data.team.length > 0 },
+    { label: "Review queue clear", ok: data.metrics.reviewTasks < 4 }
+  ];
+
+  const updateSetting = <K extends keyof WorkspaceSettings>(key: K, value: WorkspaceSettings[K]) => {
+    setSettings((current) => ({ ...current, [key]: value }));
+  };
+
+  const saveSettings = () => {
+    localStorage.setItem(settingsStorageKey, JSON.stringify(settings));
+    setSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+  };
+
+  const resetSettings = () => {
+    localStorage.removeItem(settingsStorageKey);
+    setSettings(defaultWorkspaceSettings);
+    setSavedAt(null);
+  };
+
+  const copyApiUrl = () => {
+    void navigator.clipboard?.writeText(settings.apiBaseUrl);
+  };
+
+  const downloadSettings = () => {
+    const file = new Blob([JSON.stringify({ settings, user: user.email, exportedAt: new Date().toISOString() }, null, 2)], {
+      type: "application/json"
+    });
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "launchpad-settings.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="settings-grid">
       <section className="panel settings-panel">
@@ -454,21 +542,68 @@ function SettingsView({ data }: { data: DashboardResponse }) {
           <h2>Workspace</h2>
           <SlidersHorizontal size={18} />
         </div>
-        <SettingRow label="Workspace name" value="LaunchPad Studio OS" />
-        <SettingRow label="API base URL" value={import.meta.env.VITE_API_URL ?? "/api"} />
-        <SettingRow label="Database" value="SQLite via Prisma" />
-        <SettingRow label="Projects seeded" value={String(data.projects.length)} />
+        <div className="settings-form-grid">
+          <label className="settings-field">
+            <span>Workspace name</span>
+            <input value={settings.workspaceName} onChange={(event) => updateSetting("workspaceName", event.target.value)} />
+          </label>
+          <label className="settings-field">
+            <span>API base URL</span>
+            <input value={settings.apiBaseUrl} onChange={(event) => updateSetting("apiBaseUrl", event.target.value)} />
+          </label>
+          <label className="settings-field">
+            <span>Timezone</span>
+            <select value={settings.timezone} onChange={(event) => updateSetting("timezone", event.target.value)}>
+              <option>Europe/Kyiv</option>
+              <option>Europe/Warsaw</option>
+              <option>Europe/London</option>
+              <option>America/New_York</option>
+            </select>
+          </label>
+          <label className="settings-field">
+            <span>Review day</span>
+            <select value={settings.reviewDay} onChange={(event) => updateSetting("reviewDay", event.target.value)}>
+              {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map((day) => (
+                <option key={day}>{day}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="settings-actions">
+          <button className="primary-button" onClick={saveSettings} disabled={!isDirty}>
+            <Save size={17} />
+            <span>Save</span>
+          </button>
+          <button className="secondary-button" onClick={resetSettings}>
+            <RotateCcw size={17} />
+            <span>Reset</span>
+          </button>
+          <span className="settings-save-state">{savedAt ? `Saved ${savedAt}` : isDirty ? "Unsaved changes" : "Up to date"}</span>
+        </div>
       </section>
 
       <section className="panel settings-panel">
         <div className="section-heading compact">
-          <h2>Security</h2>
-          <ShieldCheck size={18} />
+          <h2>API status</h2>
+          <Database size={18} />
         </div>
-        <SettingRow label="Authentication" value="JWT bearer tokens" />
-        <SettingRow label="Roles" value="Owner, manager, member" />
-        <SettingRow label="Protected routes" value="Dashboard, projects, tasks, team" />
-        <SettingRow label="Demo account" value="admin@launchpad.dev" />
+        <div className={`api-status-card ${healthStatus === "offline" ? "offline" : "online"}`}>
+          <strong>{healthStatus === "offline" ? "Offline" : "Online"}</strong>
+          <span>{settings.apiBaseUrl}</span>
+          <small>Latency: {latency}</small>
+        </div>
+        <div className="settings-actions">
+          <button className="secondary-button" onClick={() => healthQuery.refetch()} disabled={healthQuery.isFetching}>
+            <RefreshCw size={17} />
+            <span>{healthQuery.isFetching ? "Checking" : "Check now"}</span>
+          </button>
+          <button className="secondary-button" onClick={copyApiUrl}>
+            <Copy size={17} />
+            <span>Copy URL</span>
+          </button>
+        </div>
+        <SettingRow label="Database" value="SQLite via Prisma" />
+        <SettingRow label="Projects seeded" value={String(data.projects.length)} />
       </section>
 
       <section className="panel settings-panel wide-panel">
@@ -476,19 +611,100 @@ function SettingsView({ data }: { data: DashboardResponse }) {
           <h2>Operational defaults</h2>
           <Clock3 size={18} />
         </div>
+        <div className="settings-form-grid compact-settings">
+          <label className="settings-field">
+            <span>Sprint cadence</span>
+            <select value={settings.sprintCadence} onChange={(event) => updateSetting("sprintCadence", event.target.value)}>
+              <option>Weekly</option>
+              <option>Biweekly</option>
+              <option>Monthly</option>
+            </select>
+          </label>
+          <label className="settings-field">
+            <span>Default priority</span>
+            <select value={settings.defaultPriority} onChange={(event) => updateSetting("defaultPriority", event.target.value as TaskPriority)}>
+              {["LOW", "MEDIUM", "HIGH", "URGENT"].map((priority) => (
+                <option key={priority}>{priority}</option>
+              ))}
+            </select>
+          </label>
+          <label className="settings-field">
+            <span>Default estimate</span>
+            <input
+              type="number"
+              min={1}
+              max={80}
+              value={settings.defaultEstimateHours}
+              onChange={(event) => updateSetting("defaultEstimateHours", Number(event.target.value))}
+            />
+          </label>
+          <label className="settings-field">
+            <span>Session timeout</span>
+            <input
+              type="number"
+              min={15}
+              max={480}
+              value={settings.sessionTimeoutMinutes}
+              onChange={(event) => updateSetting("sessionTimeoutMinutes", Number(event.target.value))}
+            />
+          </label>
+        </div>
         <div className="settings-options">
           <label>
-            <input type="checkbox" defaultChecked />
+            <input type="checkbox" checked={settings.weeklyDeliveryReview} onChange={(event) => updateSetting("weeklyDeliveryReview", event.target.checked)} />
             Weekly delivery review
           </label>
           <label>
-            <input type="checkbox" defaultChecked />
+            <input type="checkbox" checked={settings.urgentTaskAlerts} onChange={(event) => updateSetting("urgentTaskAlerts", event.target.checked)} />
             Urgent task alerts
           </label>
           <label>
-            <input type="checkbox" />
+            <input type="checkbox" checked={settings.dailyDigest} onChange={(event) => updateSetting("dailyDigest", event.target.checked)} />
+            Daily digest
+          </label>
+          <label>
+            <input type="checkbox" checked={settings.autoArchiveShipped} onChange={(event) => updateSetting("autoArchiveShipped", event.target.checked)} />
             Auto-archive shipped projects
           </label>
+          <label>
+            <input type="checkbox" checked={settings.requireReviewForUrgent} onChange={(event) => updateSetting("requireReviewForUrgent", event.target.checked)} />
+            Review urgent work
+          </label>
+        </div>
+      </section>
+
+      <section className="panel settings-panel">
+        <div className="section-heading compact">
+          <h2>Account</h2>
+          <UserRound size={18} />
+        </div>
+        <SettingRow label="Signed in as" value={user.name} />
+        <SettingRow label="Email" value={user.email} />
+        <SettingRow label="Role" value={user.role.toLowerCase()} />
+        <SettingRow label="Auth" value="JWT bearer token" />
+        <button className="secondary-button full" onClick={downloadSettings}>
+          <Download size={17} />
+          <span>Export settings</span>
+        </button>
+      </section>
+
+      <section className="panel settings-panel">
+        <div className="section-heading compact">
+          <h2>Readiness</h2>
+          <ShieldCheck size={18} />
+        </div>
+        <div className="readiness-list">
+          {readiness.map((item) => (
+            <div className={item.ok ? "ready" : "blocked"} key={item.label}>
+              <CheckCircle2 size={18} />
+              <span>{item.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="settings-summary-grid">
+          <Metric label="Open" value={openTasks} />
+          <Metric label="Urgent" value={urgentTasks} />
+          <Metric label="Review" value={data.metrics.reviewTasks} />
         </div>
       </section>
     </div>
@@ -607,6 +823,17 @@ function SettingRow({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function loadWorkspaceSettings(): WorkspaceSettings {
+  const raw = localStorage.getItem(settingsStorageKey);
+  if (!raw) return defaultWorkspaceSettings;
+
+  try {
+    return { ...defaultWorkspaceSettings, ...JSON.parse(raw) };
+  } catch {
+    return defaultWorkspaceSettings;
+  }
 }
 
 function formatDate(value: string) {
