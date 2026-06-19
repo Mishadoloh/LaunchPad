@@ -1,0 +1,13 @@
+{
+  "files.exclude": {
+    "**/.dev-logs": true,
+    "**/dist": true,
+    "**/*.tsbuildinfo": true
+  },
+  "search.exclude": {
+    "**/.dev-logs": true,
+    "**/dist": true,
+    "**/node_modules": true,
+    "**/*.tsbuildinfo": true
+  }
+}

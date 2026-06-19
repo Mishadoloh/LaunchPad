@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.local
+*.db
+*.db-journal
+coverage
+.dev-logs
+.DS_Store
+npm-debug.log*
+.github-tree-payload.json

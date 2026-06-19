@@ -1,0 +1,209 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  MEMBER
+}
+
+enum ProjectStatus {
+  DISCOVERY
+  ACTIVE
+  PAUSED
+  SHIPPED
+}
+
+enum TaskStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ClientHealth {
+  GREEN
+  YELLOW
+  RED
+}
+
+enum MilestoneStatus {
+  PLANNED
+  IN_PROGRESS
+  BLOCKED
+  DONE
+}
+
+enum RiskStatus {
+  OPEN
+  WATCHING
+  MITIGATED
+  CLOSED
+}
+
+enum RiskImpact {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  role         Role          @default(MEMBER)
+  avatarUrl    String?
+  createdAt    DateTime      @default(now())
+  projects     Project[]     @relation("ProjectOwner")
+  tasks        Task[]        @relation("TaskAssignee")
+  comments     TaskComment[]
+  activity     Activity[]
+  timeEntries  TimeEntry[]
+  notes        ProjectNote[]
+  ownedRisks   Risk[]        @relation("RiskOwner")
+}
+
+model Client {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  industry    String
+  contactName String
+  contactEmail String
+  health      ClientHealth @default(GREEN)
+  notes       String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  projects    Project[]
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  client      String
+  description String
+  status      ProjectStatus @default(DISCOVERY)
+  budget      Int
+  dueDate     DateTime
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  ownerId     String
+  owner       User          @relation("ProjectOwner", fields: [ownerId], references: [id])
+  clientId    String?
+  clientRef   Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  tasks       Task[]
+  activity    Activity[]
+  milestones  Milestone[]
+  risks       Risk[]
+  notes       ProjectNote[]
+}
+
+model Task {
+  id            String        @id @default(cuid())
+  title         String
+  description   String
+  status        TaskStatus    @default(TODO)
+  priority      TaskPriority  @default(MEDIUM)
+  estimateHours Int
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  projectId     String
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assigneeId    String?
+  assignee      User?         @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  comments      TaskComment[]
+  activity      Activity[]
+  timeEntries   TimeEntry[]
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  body      String
+  createdAt DateTime @default(now())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  type      String
+  message   String
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model Milestone {
+  id          String          @id @default(cuid())
+  title       String
+  description String
+  status      MilestoneStatus @default(PLANNED)
+  dueDate     DateTime
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  projectId   String
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Risk {
+  id          String     @id @default(cuid())
+  title       String
+  summary     String
+  status      RiskStatus @default(OPEN)
+  impact      RiskImpact @default(MEDIUM)
+  probability Int        @default(40)
+  mitigation  String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  projectId   String
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  ownerId     String
+  owner       User       @relation("RiskOwner", fields: [ownerId], references: [id])
+}
+
+model TimeEntry {
+  id        String   @id @default(cuid())
+  date      DateTime
+  minutes   Int
+  note      String
+  billable  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model ProjectNote {
+  id        String   @id @default(cuid())
+  title     String
+  body      String
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+}

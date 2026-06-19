@@ -1,0 +1,26 @@
+{
+  "name": "launchpad-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Product studio workspace with React, Express, Prisma, SQLite, authentication, dashboards, and operations workflows.",
+  "workspaces": [
+    "backend",
+    "frontend",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @launchpad/shared && concurrently \"npm run dev -w @launchpad/api\" \"npm run dev -w @launchpad/web\"",
+    "build": "npm run build -w @launchpad/shared && npm run build -w @launchpad/api && npm run build -w @launchpad/web",
+    "typecheck": "npm run build -w @launchpad/shared && npm run typecheck -w @launchpad/api && npm run typecheck -w @launchpad/web",
+    "db:generate": "npm run db:generate -w @launchpad/api",
+    "db:push": "npm run db:push -w @launchpad/api",
+    "db:migrate": "npm run db:migrate -w @launchpad/api",
+    "db:seed": "npm run db:seed -w @launchpad/api",
+    "db:reset": "npm run db:reset -w @launchpad/api"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.1",
+    "concurrently": "^9.2.3",
+    "typescript": "^5.9.2"
+  }
+}

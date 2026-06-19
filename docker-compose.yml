@@ -1,0 +1,17 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: "file:./dev.db"
+      JWT_SECRET: "container-development-secret-rotate-before-release"
+      PORT: 4200
+      WEB_ORIGIN: "http://localhost:5174"
+    ports:
+      - "4200:4200"
+    volumes:
+      - api-data:/app/backend/prisma
+
+volumes:
+  api-data:
